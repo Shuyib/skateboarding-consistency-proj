@@ -1,0 +1,350 @@
+---
+title: "R Notebook for the preliminary skate project"
+output:
+  html_document: default
+  pdf_document: default
+  html_notebook:
+    highlight: zenburn
+    theme: spacelab
+---
+
+# Introduction
+Last year, I started a project called **Skate project** on [YouTube](https://www.youtube.com/playlist?list=PLwteCCP_K4M6AinSMeSZL2ULwMnHps4ki). Whose intent was to make myself and the viewer get good at skateboarding using data. I explain how i do it using software like R. I draw graphs and find the standard deviation which reveals a lot of information. That was the word for word explanation i extracted from YouTube. Now, this is a report of that analysis with a [codebook](https://drive.google.com/file/d/0B7gtq_qsY0bodXN4YVNlaFhmcU0/view?usp=sharing) - which i recommend the reader to look at before reading through this or replicating this.
+
+Our goal is, to find out what tricks I'm good at and recommend which tricks i should start with in a competition like game of S.K.A.T.E sometimes called H.O.R.S.E or in skate lines using data. First things, first Importing and Cleaning.  
+
+raw data: [google sheets download](https://docs.google.com/spreadsheets/d/148vnAxRXt3yAWjEFRIPwCM17b1qAI_7GcMmsVO2S-1Q/edit?usp=sharing)
+
+tidy data: [cleaner dataset download](https://drive.google.com/file/d/0B7gtq_qsY0boQXFOQ3FtZWJpRXc/view?usp=sharing)
+
+# Importing and Cleaning
+Doing all the necessary imports of all the packages, we'll require throughout the analysis. Plus, bringing the data into R from where you stored it in the computer.
+
+```{r}
+library(psych)
+library(ggplot2)
+library(magrittr)
+library(dplyr)
+library(lubridate)
+library(tidyr)
+library(Hmisc)
+library(gridExtra)
+
+# change to the new csv file with parsed dates and change the columns 
+# place to numbers later 
+path <- file.path("/Desktop/skate_project1.csv")
+skate_df <- read.csv(path)
+```
+
+Then here, we're exploring the dataset for clues that we require to clean it in terms of: inconsistent column names(fixed this already), missing data (there's one day i didn't record. So i backfilled it with date ahead of it 2016-07-29 - refer to the[codebook](https://drive.google.com/file/d/0B7gtq_qsY0bodXN4YVNlaFhmcU0/view?usp=sharing) for more information), outliers (the data is scaled already 0 - 5, this won't be a problem this time), duplicate rows (none), Untidy (this is a tidy dataset, don't you think?). Do you see anything strange?
+
+```{r}
+dim(skate_df) # 29 rows and 23 columns
+names(skate_df) # the column names do not require cleaning 
+class(skate_df) # data.frame, we need to convert this later
+glimpse(skate_df) # Understanding the data set
+summary(skate_df) # Understanding the data set: Summary statistics
+describe(skate_df) # Understanding the data set: Summary statistics continued answers so
+# many questions we'll explore in the dataset
+skate_df <- tbl_df(skate_df) # converts to a format liked by dplyr
+skate_df$board <- factor(skate_df$board) #convert into factors
+skate_df$randomized <- factor(skate_df$randomized) #convert into factors 
+(skate_df <- skate_df %>% select(-X)) # removing the X column since its just counts. And print results. skate_df <- skate_df[-1]
+```
+# Exploratory data analysis
+
+We'll do a lot of summary statistics and plotting here. This is done to find patterns in the data. Which i hope you'll see as we go through this analysis. We'll see if the mean of the tricks vary in an unusual way grouped by the following variables namely randomized and place. We'll not focus on this since i don't want to develop some biases. But with time we shall. Do you see anything interesting?
+
+```{r}
+# Does the mean vary among the places i've visited?
+describeBy(skate_df, group = skate_df$place)
+
+```
+
+```{r}
+# 0 means old skateboard Nocto - it's broken now and 1 one means Darcy the new skateboard
+describeBy(skate_df, group = skate_df$board)
+```
+
+```{r}
+# the codebook has more information about what O and 1 means
+describeBy(skate_df, group = skate_df$randomized)
+```
+
+
+After dissecting the data set a bit. Not much cleaning is needed since i preprocessed the
+columns in pandas especially the date column. Notice, i did some backfilling which wasn't 
+really necessary but i didn't want to lose that row. So to avoid losing it, i pushed the date "backwards" 2016-07-29 appears twice; A necessary conversion. I also wanted to make different variations of the data set; We're gonna side step that for now. Let's draw some plots. :) 
+
+```{r}
+# where did i skate the most? describe already told us this.
+# Why is it decimals and not whole numbers?
+
+ggplot(skate_df, aes(x = place)) + geom_bar(fill = "black", col = "black") +
+  labs(x = "place", y = "number of times i skated",
+title = "Plot of how many times i skated somewhere", caption = "mostly marist") + theme_classic()
+# theme_classic overides the classic ggplot theme
+```
+
+The funnest part of the analysis beckons. Taking the columns of interest doing basic math finding the sum of each column representing a trick being done in **sum1** variable. Then dividing what we'll get with total if i got the tricks right all the time. So that makes the number 145(29 times 5), then we'll divide each item by 145 (see the variable **prob_trick**). Furthermore, we'll find the standard deviation for each item using sapply - which applies a function to the columns we just made (**var_trick**)
+
+
+```{r}
+# select the columns to use later in the analysis
+skate_df_cols <- skate_df %>% select(ollie, fs.180, bs.180, pop.shove,fs.shove, kickflip,        heelflip,f.180,f.ollie,f.shove,f.fs.shove, sw.fs.bone, sw.fs.no.comply,f.bigspin,          sw.bone,halfcab,fingerflip,sw.no.cmp)
+
+(sum1 <- skate_df_cols %>% summarise_all(funs(sum))) # find sum of each trick
+(sds <- skate_df_cols %>% summarise_all(funs(sd))) # use brackets instead of calling the 
+# variable a second time or using a print statement
+class(sum1) # what's the class of the resultant data set
+
+# This function divides x being the row item that is, the trick ollie
+# by the sum of trick scores if i got them all down. 
+divide <- function(x,y){
+  divide_by(x,145)
+}
+
+sum2 <- sapply(sum1,divide)
+#prob_trick <- round(sort(sum2,decreasing = TRUE),2) another way of doing it
+prob_trick <- sum2 %>% sort(decreasing = TRUE) %>% round(2)
+
+# we can't do much with standard deviation so let's try what we've done for prob_trick
+sds2 <- sapply(skate_df_cols,sd)
+#var_trick <- round(sort(sum2,decreasing = TRUE),2))
+(var_trick <- sds2 %>% sort() %>% round(2))
+
+med <- sapply(skate_df_cols,median) # calculating medians again
+#med_trick <- round(sort(med,decreasing = TRUE),2))
+(med_trick <- med %>% sort(decreasing = TRUE))
+prob_trick # we're comparing what we got to see if this can tell me what trick i should have
+# more confidence in games of S.K.A.T.E or H.O.R.S.E.
+
+# So from this, this is the arrangement we're getting from probabilities but the median
+# gives a tie, the plots could give us a clues how to proceed or confidence intervals
+
+trick_line_up <- c('ollie','sw.fs.bone','halfcab','sw.bone','f.ollie','f.shove','fs.180','bs.180','sw.fs.no.comply','sw.no.cmp','bs.180','fingerflip','pop.shove','f.180','f.fs.shove','f.bigspin','fs.shove')
+```
+
+We can't use multiplot function from the scater package by Davis McCarthy and the grid.arrange() function from gridExtra shrinks the plots and we won't be able to see the
+plots nicely. This one by one, approach is not good for comparison. If you have a better way of doing this holler! Before, i used par which did it very well.
+
+```{r}
+# trying to make a plot with summary stats
+#plot(skate$fs180, main = "Freq of Fs180 as days passed", xlab = "day",ylab = "Frequency",type = "both")
+
+ggplot(skate_df, aes(x = ymd(date), y = ollie))  + geom_point() +
+  geom_line() + geom_hline(data = skate_df, aes(yintercept = median(ollie), color = "red")) + labs(x = "day", y = "Frequency",
+title = "Freq of ollie as days passed", caption = "More confident to start with Ollie") + scale_color_manual(name = "median", values = "red") + theme_classic()
+
+
+ggplot(skate_df, aes(x = ymd(date), y = fs.180))  + geom_point() +
+  geom_line() + geom_hline(data = skate_df, aes(yintercept = median(fs.180), col = "red")) + labs(x = "day", y = "Frequency",
+title = "Freq of fs.180 as days passed", caption = "fs.180 is shaky")  + scale_color_manual(name = "median", values = "red") + theme_classic()
+
+ggplot(skate_df, aes(x = ymd(date), y = bs.180))  + geom_point() +
+  geom_line() + geom_hline(data = skate_df, aes(yintercept = median(bs.180), col = "red")) + labs(x = "day", y = "Frequency",
+title = "Freq of bs.180 as days passed", caption = "bs.180 are a bit similiar median is equal")  + scale_color_manual(name = "median", values = "red") + theme_classic()
+
+# we can use grid arrange on a separate code chunks
+
+#-----------------------------------------------------------------------------------------
+# it's time we made a function
+
+# Instead of writing the code over and over again i made a function that just 
+# requires you to type something y_axis_label (The y axis coordinate), y_intercept_med(the median of the trick), title_of_graph and caption_of_graph
+
+plot_gg_tricks <- function(y_axis_label,y_intercept_med,title_of_graph = readline(), caption_of_graph = readline()){
+  ggplot(skate_df, aes(x = ymd(date), y = y_axis_label))  + geom_point() +
+  geom_line() + geom_hline(data = skate_df, aes(yintercept = median(y_intercept_med), col = "red")) + labs(x = "day", y = "Frequency",
+title = title_of_graph, caption = caption_of_graph) + scale_color_manual(name = "median", values = "red") + theme_classic()
+}
+
+# pop.shove
+plot_gg_tricks(y_axis_label = skate_df$pop.shove,y_intercept_med = skate_df$pop.shove,"Freq of pop.shove as days passed", "pop.shove come along way not so confident with this.")
+
+#fs.shove
+plot_gg_tricks(y_axis_label = skate_df$fs.shove,y_intercept_med = skate_df$fs.shove,"Freq of fs.shove as days passed", "fs.shove still learning it notice the many zeros at the start.")
+
+#kickflip
+plot_gg_tricks(y_axis_label = skate_df$kickflip,y_intercept_med = skate_df$kickflip,"Freq of kickflip as days passed", "kickflip didn't do any")
+
+# heelflip
+plot_gg_tricks(y_axis_label = skate_df$heelflip,y_intercept_med = skate_df$heelflip,"Freq of heelflip as days passed", "heelflip didn't do any")
+
+# f.180
+plot_gg_tricks(y_axis_label = skate_df$f.180,y_intercept_med = skate_df$f.180,"Freq of f.180 as days passed", "f.180 is confusing summary statistics to the rescue.")
+
+#f.ollie
+plot_gg_tricks(y_axis_label = skate_df$f.ollie,y_intercept_med = skate_df$f.ollie,"Freq of f.ollie as days passed", "f.ollie i'm improving at this one of my top 5 tricks")
+
+# f.shove
+plot_gg_tricks(y_axis_label = skate_df$f.shove,y_intercept_med = skate_df$f.shove,"Freq of f.shove as days passed", "f.shove looking good.")
+
+#f.fs.shove
+plot_gg_tricks(y_axis_label = skate_df$f.fs.shove,y_intercept_med = skate_df$f.fs.shove,"Freq of f.fs.shove as days passed", "f.fs.shove learning this one as well never done it more than thrice.")
+
+# sw.fs.bone
+plot_gg_tricks(y_axis_label = skate_df$sw.fs.bone,y_intercept_med = skate_df$sw.fs.bone,"Freq of sw.fs.bone as days passed", "sw.fs.bone looks like a top 5 trick.")
+
+# sw.fs.no.comply
+plot_gg_tricks(y_axis_label = skate_df$sw.fs.no.comply,y_intercept_med = skate_df$sw.fs.no.comply,"Freq of sw.fs.no.comply as days passed", "sw.fs.no.comply seems that i can improve this")
+
+#f.bigspin
+plot_gg_tricks(y_axis_label = skate_df$f.bigspin,y_intercept_med = skate_df$f.bigspin,"Freq of f.bigspin as days passed", "f.bigspin very bad at these max times done 2.")
+
+#sw.bone
+plot_gg_tricks(y_axis_label = skate_df$sw.bone,y_intercept_med = skate_df$sw.bone,"Freq of sw.bone as days passed", "sw.bone another good trick to start with look at those 5's")
+
+#halfcab
+plot_gg_tricks(y_axis_label = skate_df$halfcab,y_intercept_med = skate_df$halfcab,"Freq of halfcab as days passed", "halfcab started shaky but stabilizing slowly need more data.")
+
+# fingerflip
+plot_gg_tricks(y_axis_label = skate_df$fingerflip,y_intercept_med = skate_df$fingerflip,"Freq of fingerflip as days passed", "fingerflip i learned this from playing a videogame and did it.")
+
+#sw.no.cmp
+plot_gg_tricks(y_axis_label = skate_df$sw.no.cmp, y_intercept_med = skate_df$sw.no.cmp, "Freq of sw.no.cmp as days passed", "sw.no.cmp looks like i'm better off doing this first than the fingerflip.")
+
+```
+
+# Graphical statistical analysis
+
+The data doesn't meet the requirements of the central limit theorem but we can try make confidence intervals with boot strapping(sampling within a sample) to see what we get especially where they were ties. About what trick to do next. Let me try with ggplot2. We'll use summary functions from the Hmisc package specifically the smean.cl.boot function and smedian.hilow. If you're not acquainted to these functions use this in the console to find out what they do ?smean.cl.boot and ?smedian.hilow. The green line represents the range plausible range of means if we did this study again 1000 times for example sw.fs.bone(switch frontside bone) between 4 and 5 times whereas, the green dot represents the mean. This is so cool!
+
+
+```{r}
+# remember we made this, let's see if it still holds
+(trick_line_up)
+
+# this is a graphical statistical visualization
+# according to the documentation mean.cl.boot is a very fast implementation of the basic nonparametric bootstrap for obtaining confidence limits for the population mean without assuming normality
+
+# I don't recommend this test since i'm getting errors about the geom_pointrange not being
+# specified. If you have a better of doing this let me know. The fastest way to reach me is twitter or youtube
+
+plot_gg_tricks2 <- function(y_axis_label,title_of_graph = readline(), caption_of_graph = readline()){
+  ggplot(skate_df, aes(x = ymd(date), y = y_axis_label))  + geom_point() +
+  geom_line() +  stat_summary(fun.data = mean_cl_boot, col = "green") + labs(x = "day", y = "Frequency", title = title_of_graph, caption = caption_of_graph) + theme_classic()
+}
+
+# Less repetition i suppose and typing
+# You know the drill, this time it will based on the tricks that we found are good start
+# with based on median and probability
+
+
+# ollie
+# Cl means confidence interval i'm using 0.95 the default and bootstrapped 1000 times
+
+plot_gg_tricks2(y_axis_label = skate_df$ollie, title_of_graph = 'Freq of ollie as days passed with mean CI',caption_of_graph = "start with ollie got it.")
+
+# sw.fs.bone
+plot_gg_tricks2(y_axis_label = skate_df$sw.fs.bone, title_of_graph = 'Freq of ollie as days passed with mean CI',caption_of_graph = "Then do a sw.fs.bone.")
+
+# sw.bone
+plot_gg_tricks2(y_axis_label = skate_df$sw.bone, title_of_graph = 'Freq of sw.bone as days passed with mean CI',caption_of_graph = "so we have a tie, i'm more confident with sw.fs.bone.")
+
+# f.ollie
+plot_gg_tricks2(y_axis_label = skate_df$f.ollie, title_of_graph = 'Freq of f.ollie as days passed with mean CI',caption_of_graph = "i had a feeling this one of my top 5.")
+
+# f.shove
+plot_gg_tricks2(y_axis_label = skate_df$f.shove, title_of_graph = 'Freq of f.shove as days passed with mean CI',caption_of_graph = "yup, this one should be next after f.ollie.")
+
+# fs.180
+plot_gg_tricks2(y_axis_label = skate_df$fs.180, title_of_graph = 'Freq of fs.180 as days passed with mean CI',caption_of_graph = "I learned this first, so naturally, i do it first.")
+
+# bs.180
+plot_gg_tricks2(y_axis_label = skate_df$bs.180, title_of_graph = 'Freq of bs.180 as days passed with mean CI',caption_of_graph = "either way sort of trick, can do between 2/4.")
+
+# sw.fs.no.comply
+plot_gg_tricks2(y_axis_label = skate_df$sw.fs.no.comply, title_of_graph = 'Freq of sw.fs.no.comply as days passed with mean CI',caption_of_graph = "ties need more data for this one.")
+
+# sw.no.comp
+plot_gg_tricks2(y_axis_label = skate_df$sw.no.cmp, title_of_graph = 'Freq of sw.no.cmp as days passed with mean CI',caption_of_graph = "ties need more data for this one.")
+
+# fingerflip
+plot_gg_tricks2(y_axis_label = skate_df$fingerflip, title_of_graph = 'Freq of fingerflip as days passed with mean CI',caption_of_graph = "needs more data.")
+
+# pop shove
+plot_gg_tricks2(y_axis_label = skate_df$pop.shove, title_of_graph = 'Freq of pop.shove as days passed with mean CI',caption_of_graph = "pop shove is better than my since the limits are better numbers.")
+
+# f.180
+plot_gg_tricks2(y_axis_label = skate_df$f.180, title_of_graph = 'Freq of f.180 as days passed with mean CI',caption_of_graph = "you can do it twice with confidence.")
+
+# f.fs.shove
+plot_gg_tricks2(y_axis_label = skate_df$f.fs.shove, title_of_graph = 'Freq of f.fs.shove as days passed with mean CI',caption_of_graph = "this trick belongs here. I concur with this.")
+
+# f.bigspin
+plot_gg_tricks2(y_axis_label = skate_df$f.bigspin, title_of_graph = 'Freq of f.bigspin as days passed with mean CI',caption_of_graph = "Needs more training.")
+
+# fs.shove
+plot_gg_tricks2(y_axis_label = skate_df$fs.shove, title_of_graph = 'Freq of fs.shove as days passed with mean CI',caption_of_graph = "yeah, this one should be the last.Those zeros prove it.")
+
+```
+```{r}
+# do for the trick tie breakers that is smedian.hilow, with quantile calculation 
+# we're expecting less variability is better
+
+# read the docs abouts smedidan.hilow()
+
+# I wanted to do this test instead check it out ?wilcoxtest()
+
+print("ollie");smedian.hilow(skate_df$ollie) #1
+print("sw.fs.bone"); smedian.hilow(skate_df$sw.fs.bone) #2
+print("halfcab"); smedian.hilow(skate_df$halfcab) #3
+print("sw.bone"); smedian.hilow(skate_df$sw.bone) #4
+print("f.ollie"); smedian.hilow(skate_df$f.ollie) #5
+print("f.shove"); smedian.hilow(skate_df$f.shove) #6
+print("fs.180"); smedian.hilow(skate_df$fs.180) #7
+print("bs.180"); smedian.hilow(skate_df$bs.180) #8
+print("sw.fs.no.comply"); smedian.hilow(skate_df$sw.fs.no.comply) #8
+print("sw.no.cmp"); smedian.hilow(skate_df$sw.no.cmp) #9
+print("fingerflip"); smedian.hilow(skate_df$fingerflip) #10
+print("pop.shove"); smedian.hilow(skate_df$pop.shove) #12
+print("f.180"); smedian.hilow(skate_df$f.180) #11
+print("f.fs.shove"); smedian.hilow(skate_df$f.fs.shove) #13
+print("f.bigspin"); smedian.hilow(skate_df$f.bigspin) #14
+print("fs.shove"); smedian.hilow(skate_df$fs.shove) #15
+```
+
+
+
+
+# Conclusion
+One interesting thing, i should point out is that I'm not confident with the following tricks fakie bigspin(f.bigspin), frontside shove(fs.shove) and sometimes fakie frontside shove(f.fs.shove). Yet with our numerous tests this is evident. We used data to confirm this! That makes me excited. Otherwise, after inspecting everything this is how i think my line up of tricks should be with some freedom to alternate ollie,sw.fs.bone,halfcab,sw.bone,f.ollie,f.shove,fs.180,bs.180,sw.fs.no.comply,sw.no.cmp,fingerflip,pop.shove,f.180,f.fs.shove, f.bigspin, fs.shove. I'll proceed to test this line up with two constraints just flatground at marist lane and with a game of S.K.A.T.E with a friend. Thinking of doing tests that involve p values soon.
+
+
+# References
+R Core Team (2016). R: A language and environment for statistical computing. R Foundation for Statistical Computing, Vienna, Austria. URL https://www.R-project.org/.
+  
+Revelle, W. (2017) psych: Procedures for Personality and Psychological Research, Northwestern University, Evanston, Illinois, USA,https://CRAN.R-project.org/package=psych Version = 1.7.5.
+
+H.Wickham. ggplot2: Elegant Graphics for Data Analysis. Springer-Verlag New York, 2009.
+
+Stefan Milton Bache and Hadley Wickham (2014). magrittr: A Forward-Pipe Operator for R. R package version 1.5. https://CRAN.R-project.org/package=magrittr.
+
+Hadley Wickham, Romain Francois, Lionel Henry and Kirill MÃ¼ller (2017). dplyr: A Grammar of Data Manipulation. R package version 0.7.2. https://CRAN.R-project.org/package=dplyr.
+
+Garrett Grolemund, Hadley Wickham (2011). Dates and Times Made Easy with lubridate. Journal of Statistical Software, 40(3), 1-25. URL http://www.jstatsoft.org/v40/i03/.
+
+Hadley Wickham and Lionel Henry (2017). tidyr: Easily Tidy Data with 'spread()' and 'gather()' Functions. R package version 0.7.0. https://CRAN.R-project.org/package=tidyr
+
+Frank E Harrell Jr, with contributions from Charles Dupont and many others. (2017). Hmisc: Harrell Miscellaneous. R package version 4.0-3. https://CRAN.R-project.org/package=Hmisc
+
+Baptiste Auguie (2016). gridExtra: Miscellaneous Functions for "Grid" Graphics. R package version 2.2.1. https://CRAN.R-project.org/package=gridExtra
+
+https://www.datacamp.com/courses/data-visualization-with-ggplot2-1
+
+https://www.datacamp.com/courses/data-visualization-with-ggplot2-2
+
+https://stackoverflow.com/questions/26890354/lineplot-legend-abline-ggplot
+
+https://stats.stackexchange.com/questions/112829/how-do-i-calculate-confidence-intervals-for-a-non-normal-distribution
+
+https://stackoverflow.com/questions/5226807/multiple-graphs-in-one-canvas-using-ggplot2
+
+https://github.com/Shuyib/datasharing
+
+
+# Session information
+```{r}
+sessionInfo()
+```
