@@ -2,3 +2,4 @@
     remote = drivedvc
 ['remote "drivedvc"']
     url = gdrive://1rr-XSPMFs9qXAIuixd75ZXk9uTy3UDHG
+    gdrive_acknowledge_abuse = true
