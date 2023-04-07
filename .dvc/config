@@ -1,8 +1,0 @@
-[core]
-    analytics = false
-    remote = drivedvc
-['remote "myremote"']
-    url = gdrive://148vnAxRXt3yAWjEFRIPwCM17b1qAI_7GcMmsVO2S-1Q
-    gdrive_acknowledge_abuse = true
-['remote "drivedvc"']
-    url = gdrive://1rr-XSPMFs9qXAIuixd75ZXk9uTy3UDHG
