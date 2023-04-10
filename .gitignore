@@ -38,3 +38,5 @@ vignettes/*.pdf
 # R Environment Variables
 .Renviron
 /New skate project.xlsx
+packrat/lib*/
+packrat/
