@@ -35,22 +35,6 @@ df["randomized"] = df["randomized"].astype("category")
 df2 = df2.rename(columns={"Random trick try": "trick", "Followed Y/N": "followed"})
 df2["followed"] = df2["followed"].astype("category")
 
-# find the sum of the columns and add it to the dataframe
-# columnwise sum
-# df["total"] = df.iloc[:, 1:21].sum(axis=1)
-
-# columwise probability of the trick
-# df["prob"] = df.iloc[:, 1:21].sum(axis=1) / 20
-
-
-# get the first 21 columns names
-# make a dataframe with columns and the trick names
-trick_names = df.columns[:21]
-trick_names = pd.DataFrame(trick_names, columns=["trick_names"])
-
-# merge the trick names with the second dataframe
-df3 = pd.merge(df2, trick_names, left_on="trick", right_on="trick_names", how="left")
-
 
 # output a button to download the edited dataframe
 def download(dataframe):
@@ -63,13 +47,15 @@ def download(dataframe):
 def draw_line_plots(dataframe):
     dataframe = df
     dataframe2 = df2
-    fig, ax = plt.subplots(7, 3, figsize=(20, 20))
-    ax = ax.ravel()
+    fig, ax = plt.subplots(7, 3, figsize=(20, 20))  # 7 rows and 3 columns
+    ax = ax.ravel()  # flatten the 2D array to 1D array
     for i, col in enumerate(dataframe.columns[:21]):
-        ax[i].plot(dataframe[col], label=col)
-        ax[i].axhline(dataframe[col].mean(), color="red", linestyle="--", label="mean")
-        ax[i].set_title(col)
-        ax[i].legend()
+        ax[i].plot(dataframe[col], label=col)  # Plot the data in the column
+        ax[i].axhline(
+            dataframe[col].mean(), color="red", linestyle="--", label="mean"
+        )  # add a horizontal line of the mean
+        ax[i].set_title(col)  # Add title to the plot
+        ax[i].legend()  # Add legend
         ax[i].grid(True)  # Add gridlines
         ax[i].set_xlabel("Index")  # Add x-axis label
         ax[i].set_ylabel("Value")  # Add y-axis label
@@ -80,15 +66,17 @@ def draw_line_plots(dataframe):
             "Sum: " + str(dataframe[col].sum()),
             horizontalalignment="center",
             verticalalignment="center",
-            transform=ax[i].transAxes,
+            transform=ax[i].transAxes,  # transform the text to the axis
             fontsize=12,
             color="green",
             weight="bold",
         )
+
     plt.tight_layout()
     plt.savefig("line_plots.png")
     plot = ["line_plots.png"]
-    return dataframe, dataframe2, plot
+    download(df)
+    return dataframe, dataframe2, plot, "edited_data.csv"  # three outputs
 
 
 # create the gradio interface, add button to download the edited dataframe
@@ -96,9 +84,8 @@ gr.Interface(
     fn=draw_line_plots,
     inputs=gr.DataFrame(type="pandas", headers=list(df.columns), label="Data"),
     outputs=[
-        gr.DataFrame(type="pandas", headers=list(df.columns), label="Edited Data"),
-        gr.DataFrame(type="pandas", headers=list(df2.columns), label="Guide Data"),
         gr.Gallery(type="file", label="Line Plots"),
+        gr.File(label="Download Edited Data"),
     ],
     title="Skate Data Editor",
     description="Edit the data and download the edited dataframe",
