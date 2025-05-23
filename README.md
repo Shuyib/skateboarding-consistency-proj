@@ -3,6 +3,8 @@
 Sk8bro is an interactive Shiny dashboard application designed for skateboarders to track, visualize, and analyze their progress across various tricks. The app connects to Google Sheets to store and retrieve skating session data, making it easy to log new sessions and visualize progress over time.
 
 ![Sk8bro Dashboard](sk8_dashboard.png)
+![Skbro Dashboard genai](sk8_dashboard2.png)
+![Sk8bro Dashboard genai2](sk8_dashboard3.png)
 
 ## ✨ Features
 
