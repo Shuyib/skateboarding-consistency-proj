@@ -45,8 +45,7 @@ if (nzchar(Sys.getenv("GS4_SA_JSON"))) {
 # Defines the URL for the Google Sheet that stores the skate log data.
 sheet_url <- paste0(
   "https://docs.google.com/spreadsheets/d/",
-  Sys.getenv("GSHEET_ID"), # Set this environment variable in your .Renviron
-  "/edit#gid=0"
+  "148vnAxRXt3yAWjEFRIPwCM17b1qAI_7GcMmsVO2S-1Q"
 )
 
 # ── Helper Functions ─────────────────────────────────────────────────────────
@@ -513,25 +512,54 @@ server <- function(input, output, session) {
   output$scat <- renderPlotly({
     df <- filt()
     validate(need(nrow(df) > 0, "No data"))
+    
+    # Create a complete date sequence for the selected range
+    all_dates <- seq(from = input$rng[1], to = input$rng[2], by = "day")
+    complete_df <- tibble(date = all_dates) |>
+      left_join(df, by = "date")
+    
+    # Fill missing values with 0 for the selected trick
+    complete_df[[input$trick]] <- replace_na(complete_df[[input$trick]], 0)
+    
     mu <- mean(df[[input$trick]], na.rm = TRUE)
 
-    p <- plot_ly(df,
+    p <- plot_ly(complete_df,
       x = ~date,
       y = as.formula(paste0("~`", input$trick, "`")),
-      type = "scatter", mode = "markers+lines"
+      type = "scatter", mode = "markers+lines",
+      # Color points differently for actual data vs filled zeros
+      marker = list(
+        color = ifelse(is.na(complete_df[[input$trick]]) | 
+                      complete_df$date %in% df$date, "blue", "lightblue"),
+        size = ifelse(complete_df$date %in% df$date, 8, 4)
+      ),
+      hovertemplate = paste0(
+        "Date: %{x}<br>",
+        "Lands: %{y}<br>",
+        "<extra></extra>"
+      )
     )
 
-    # Only add segment if there's a range of dates
-    if (nrow(df) > 1 && min(df$date) < max(df$date)) {
-      p <- p |> add_segments(
-        x = min(df$date), xend = max(df$date),
-        y = mu, yend = mu, line = list(dash = "dash"),
-        inherit = FALSE, showlegend = FALSE, # Add inherit=FALSE
-        name = "Mean"
-      ) # Add name for clarity if needed
-    }
+    # Add mean line across the full date range
+    p <- p |> add_segments(
+      x = input$rng[1], xend = input$rng[2],
+      y = mu, yend = mu, line = list(dash = "dash", color = "red"),
+      inherit = FALSE, showlegend = FALSE,
+      name = "Mean"
+    )
 
-    p |> layout(yaxis = list(title = "Lands"), showlegend = FALSE)
+    p |> layout(
+      xaxis = list(
+        title = "Date",
+        range = c(input$rng[1], input$rng[2]),
+        type = "date"
+      ),
+      yaxis = list(
+        title = "Lands",
+        rangemode = "tozero"  # Ensure y-axis starts from 0
+      ),
+      showlegend = FALSE
+    )
   })
 
   # Monthly Heatmap: Shows trick activity aggregated by month.
@@ -798,24 +826,18 @@ server <- function(input, output, session) {
       ) |>
       filter(year(day) == yr)
 
-    # Only get the trick columns, not ALL numeric columns
-    trick_cols_now <- trick_cols()  # Use the trick_cols() reactive instead
+    # Force all trick columns to numeric (except date, y, wk)
+    trick_cols_now <- setdiff(names(df), c("day", "date", "y", "wk"))
+    df[trick_cols_now] <-
+      lapply(
+        df[trick_cols_now],
+        function(x) suppressWarnings(as.numeric(x))
+      )
 
-    # Ensure columns are numeric
-    df_numeric <- df |> select(day, y, wk, all_of(trick_cols_now))
-    df_numeric[trick_cols_now] <- lapply(
-      df_numeric[trick_cols_now],
-      function(x) suppressWarnings(as.numeric(as.character(x)))
-    )
-
-    # Calculate lands as the sum of tricks landed per day
-    df <- df_numeric |>
+    df <- df |>
       group_by(day, y, wk) |> #nolinter
       summarise(
-        lands = sum(
-          across(all_of(trick_cols_now), ~replace_na(.x, 0)),
-          na.rm = TRUE
-        ),
+        lands = sum(across(all_of(trick_cols_now)), na.rm = TRUE),
         .groups = "drop"
       )
 
