@@ -43,10 +43,7 @@ if (nzchar(Sys.getenv("GS4_SA_JSON"))) {
 }
 
 # Defines the URL for the Google Sheet that stores the skate log data.
-sheet_url <- paste0(
-  "https://docs.google.com/spreadsheets/d/",
-  "148vnAxRXt3yAWjEFRIPwCM17b1qAI_7GcMmsVO2S-1Q"
-)
+sheet_url <- Sys.getenv("SHEET_ID") # Google Sheet ID
 
 # ── Helper Functions ─────────────────────────────────────────────────────────
 # This section contains utility functions used throughout the app.
