@@ -44,3 +44,14 @@ packrat/
 # excel
 *.xlsx
 
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+
+# Gradio temporary files
+*.png
+*.csv
+edited_data.csv
+line_plots.png
+
