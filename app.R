@@ -241,14 +241,33 @@ ui <- dashboardPage(
   )
 )
 
+# ── Additional Helper Functions ──────────────────────────────────────────────
+#' Check if a Vector is Numeric-Like
+#'
+#' Determines if a vector can be considered numeric or coercible to numeric.
+#' Handles lists, already numeric vectors, and character vectors.
+#'
+#' @param x A vector to check.
+#' @return TRUE if numeric-like, FALSE otherwise.
+is_numeric_like <- function(x) {
+  if (is.list(x)) return(FALSE)
+  if (is.numeric(x)) return(TRUE)
+  vals <- as.character(x)
+  vals <- vals[!is.na(vals) & vals != ""]
+  if (length(vals) == 0) return(TRUE)
+  !all(is.na(suppressWarnings(as.numeric(vals))))
+}
+
 # ── Server Logic ─────────────────────────────────────────────────────────────
 # Contains the server-side logic for the Shiny application.
 # Handles data processing, plot generation, and interactions.
 server <- function(input, output, session) {
   autoInvalidate <- reactiveTimer(60000, session)  # every 60 seconds
+  logs_trigger <- reactiveVal(Sys.time())  # trigger for manual log refresh
 
   logs <- reactive({
     autoInvalidate()          # invalidates this reactive every minute
+    logs_trigger()            # also invalidate when manually triggered
     read_logs()               # so we re‐read the sheet
   })
 
@@ -258,32 +277,13 @@ server <- function(input, output, session) {
     raw <- logs()
 
     # Identify columns that are numeric or can be treated as numeric
-    potential_trick_cols <- names(raw)[sapply(raw, function(x) {
-      # Skip list columns
-      if (is.list(x)) {
-        return(FALSE)
-      }
-      # Keep already numeric columns
-      if (is.numeric(x)) {
-        return(TRUE)
-      }
-      # Check if character columns can be coerced (even if all are NA/0)
-      if (is.character(x)) {
-        # Check if *any* non-NA value can be coerced, or if it's all NA/empty
-        vals <- na.omit(x[x != ""])
-        if (length(vals) == 0) {
-          return(TRUE)
-        } # Keep if all NA/empty initially
-        return(all(suppressWarnings(!is.na(as.numeric(vals)))))
-      }
-      FALSE # Skip other types
-    })]
+    potential_trick_cols <- names(raw)[sapply(raw, is_numeric_like)]
 
     # Exclude known non-trick columns
     setdiff(
       potential_trick_cols,
       c(
-        "date", "date_clean", "place", "location", # Ensure these are excluded
+        "date", "date_clean", "place", "location",
         grep("^attempts_", names(raw), value = TRUE),
         "randomized", "weights", "C.virus", "board"
       )
@@ -297,7 +297,7 @@ server <- function(input, output, session) {
     tr <- trick_cols()
     updateSelectInput(session, "trick",
       choices = tr,
-      selected = input$trick %||% tr[1]
+      selected = if (length(tr) > 0) input$trick %||% tr[1] else NULL
     )
 
     # trick selector
@@ -723,9 +723,9 @@ server <- function(input, output, session) {
       )
     }
 
-    df <- read_sheet(sheet_url, sheet = "Sheet1", col_types = "c")
+    # Use read_logs() for normalized data processing
+    df <- read_logs()
     date_col <- if ("date" %in% names(df)) "date" else "date_clean"
-    df[[date_col]] <- safe_date(df[[date_col]])
 
     row_match <- which(
       as.character(df[[date_col]]) == as.character(input$new_date) &
@@ -749,8 +749,9 @@ server <- function(input, output, session) {
     row_list[[input$new_trick]] <- as.character(input$new_land)
 
     final_row_list <- row_list
+    # Use is_numeric_like() for robust trick column detection
     current_trick_cols <- setdiff(
-      hdr[sapply(df, function(x) is.numeric(safe_date(x)) || is.numeric(x))],
+      names(df)[sapply(df, is_numeric_like)],
       c(
         "date", "date_clean", loc_col, grep("^attempts_", hdr, value = TRUE),
         "randomized", "weights", "C.virus", "board"
@@ -793,8 +794,8 @@ server <- function(input, output, session) {
   # Randomiser Logic: Generates a random list of tricks for practice.
   # Number of tricks is determined by a slider input.
   output$nrand_ui <- renderUI(
-    sliderInput("nrand", "How many tricks?", 1, length(trick_cols()),
-      value = min(5, length(trick_cols())), step = 1
+    sliderInput("nrand", "How many tricks?", 1, max(1, length(trick_cols())),
+      value = min(5, max(1, length(trick_cols()))), step = 1
     )
   )
   plan <- eventReactive(input$roll, {
