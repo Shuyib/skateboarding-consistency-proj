@@ -73,6 +73,23 @@ safe_date <- function(x) {
   ) |> as.Date()
 }
 # the |> operator is used to pipe the result of parse_date_time to as.Date()
+
+#' Check if a Column is Numeric-Like
+#'
+#' Determines if a column can be treated as numeric, handling lists, actual
+#' numeric columns, and character columns that contain numeric-like values.
+#'
+#' @param x A vector or column to check.
+#' @return TRUE if the column is numeric-like, FALSE otherwise.
+is_numeric_like <- function(x) {
+  if (is.list(x)) return(FALSE)
+  if (is.numeric(x)) return(TRUE)
+  vals <- as.character(x)
+  vals <- vals[!is.na(vals) & vals != ""]
+  if (length(vals) == 0) return(TRUE)
+  !all(is.na(suppressWarnings(as.numeric(vals))))
+}
+
 # Reads and preprocesses data from the Google Sheet.
 # Handles date conversion and ensures trick columns are numeric.
 read_logs <- function() {
@@ -246,9 +263,11 @@ ui <- dashboardPage(
 # Handles data processing, plot generation, and interactions.
 server <- function(input, output, session) {
   autoInvalidate <- reactiveTimer(60000, session)  # every 60 seconds
+  logs_trigger <- reactiveVal(Sys.time())
 
   logs <- reactive({
     autoInvalidate()          # invalidates this reactive every minute
+    logs_trigger()            # also invalidates when manually triggered
     read_logs()               # so we re‐read the sheet
   })
 
@@ -257,33 +276,14 @@ server <- function(input, output, session) {
   trick_cols <- reactive({
     raw <- logs()
 
-    # Identify columns that are numeric or can be treated as numeric
-    potential_trick_cols <- names(raw)[sapply(raw, function(x) {
-      # Skip list columns
-      if (is.list(x)) {
-        return(FALSE)
-      }
-      # Keep already numeric columns
-      if (is.numeric(x)) {
-        return(TRUE)
-      }
-      # Check if character columns can be coerced (even if all are NA/0)
-      if (is.character(x)) {
-        # Check if *any* non-NA value can be coerced, or if it's all NA/empty
-        vals <- na.omit(x[x != ""])
-        if (length(vals) == 0) {
-          return(TRUE)
-        } # Keep if all NA/empty initially
-        return(all(suppressWarnings(!is.na(as.numeric(vals)))))
-      }
-      FALSE # Skip other types
-    })]
+    # Identify columns that are numeric-like
+    potential_trick_cols <- names(raw)[sapply(raw, is_numeric_like)]
 
     # Exclude known non-trick columns
     setdiff(
       potential_trick_cols,
       c(
-        "date", "date_clean", "place", "location", # Ensure these are excluded
+        "date", "date_clean", "place", "location",
         grep("^attempts_", names(raw), value = TRUE),
         "randomized", "weights", "C.virus", "board"
       )
@@ -297,7 +297,7 @@ server <- function(input, output, session) {
     tr <- trick_cols()
     updateSelectInput(session, "trick",
       choices = tr,
-      selected = input$trick %||% tr[1]
+      selected = if(length(tr) > 0) input$trick %||% tr[1] else NULL
     )
 
     # trick selector
@@ -562,6 +562,8 @@ server <- function(input, output, session) {
   # Monthly Heatmap: Shows trick activity aggregated by month.
   # Helps identify trends and consistency in practicing different tricks.
   output$heat <- renderPlotly({
+    validate(need(length(trick_cols()) > 0, "No trick data available for heatmap."))
+    
     long <- logs() |>
       select(date, all_of(trick_cols())) |>
       pivot_longer(-date, names_to = "trick", values_to = "lands") |>
@@ -723,9 +725,8 @@ server <- function(input, output, session) {
       )
     }
 
-    df <- read_sheet(sheet_url, sheet = "Sheet1", col_types = "c")
+    df <- read_logs()
     date_col <- if ("date" %in% names(df)) "date" else "date_clean"
-    df[[date_col]] <- safe_date(df[[date_col]])
 
     row_match <- which(
       as.character(df[[date_col]]) == as.character(input$new_date) &
@@ -750,7 +751,7 @@ server <- function(input, output, session) {
 
     final_row_list <- row_list
     current_trick_cols <- setdiff(
-      hdr[sapply(df, function(x) is.numeric(safe_date(x)) || is.numeric(x))],
+      names(df)[sapply(df, is_numeric_like)],
       c(
         "date", "date_clean", loc_col, grep("^attempts_", hdr, value = TRUE),
         "randomized", "weights", "C.virus", "board"
@@ -758,7 +759,7 @@ server <- function(input, output, session) {
     )
     for (col in current_trick_cols) {
       if (is.na(final_row_list[[col]]) && col != input$new_trick) {
-        final_row_list[[col]] <- 0  # numeric zero, not "0"
+        final_row_list[[col]] <- "0"  # character "0" for writing to sheet
       }
     }
 
@@ -793,8 +794,8 @@ server <- function(input, output, session) {
   # Randomiser Logic: Generates a random list of tricks for practice.
   # Number of tricks is determined by a slider input.
   output$nrand_ui <- renderUI(
-    sliderInput("nrand", "How many tricks?", 1, length(trick_cols()),
-      value = min(5, length(trick_cols())), step = 1
+    sliderInput("nrand", "How many tricks?", 1, max(1, length(trick_cols())),
+      value = min(5, max(1, length(trick_cols()))), step = 1
     )
   )
   plan <- eventReactive(input$roll, {
