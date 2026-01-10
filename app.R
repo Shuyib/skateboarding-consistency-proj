@@ -562,6 +562,8 @@ server <- function(input, output, session) {
   # Monthly Heatmap: Shows trick activity aggregated by month.
   # Helps identify trends and consistency in practicing different tricks.
   output$heat <- renderPlotly({
+    validate(need(length(trick_cols()) > 0, "No trick data available for heatmap."))
+    
     long <- logs() |>
       select(date, all_of(trick_cols())) |>
       pivot_longer(-date, names_to = "trick", values_to = "lands") |>
